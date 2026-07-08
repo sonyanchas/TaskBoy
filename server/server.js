@@ -56,10 +56,10 @@ app.post('/register', async (req, res) => {
     console.log(`Received registration request for email: ${email}`);
 
     // Email validation
-    const emailPattern = /@(spelman\.edu|morehouse\.edu)$/;
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailPattern.test(email)) {
-        return res.status(400).json({ success: false, message: 'Email must end with @spelman.edu or @morehouse.edu.' });
-    }
+        return res.status(400).json({ success: false, message: 'Please enter a valid email address.' });
+}
 
     try {
         // Register user in Supabase Auth
@@ -261,7 +261,6 @@ const { Stripe } = require("stripe");
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
-const express = require("express");
 const app = express();
 const router = express.Router();
 app.use(express.static("public"));
