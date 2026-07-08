@@ -57,10 +57,10 @@ app.post('/register', async (req, res) => {
     console.log(`Received registration request for email: ${email}`);
 
     // Email validation
-    const emailPattern = /@(spelman\.edu|morehouse\.edu)$/;
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailPattern.test(email)) {
-        return res.status(400).json({ success: false, message: 'Email must end with @spelman.edu or @morehouse.edu.' });
-    }
+        return res.status(400).json({ success: false, message: 'Please enter a valid email address.' });
+}
 
     try {
         // Register user in Supabase Auth
@@ -260,6 +260,11 @@ app.get('/search', async (req, res) => {
 const Stripe = require("stripe");
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+<<<<<<< HEAD
+=======
+
+const app = express();
+>>>>>>> f5e3c73ae8ebd6fe3859870027c4e4ab28a8b31d
 const router = express.Router();
 
 // Thin webhook must see the raw body before any JSON/urlencoded parsers run

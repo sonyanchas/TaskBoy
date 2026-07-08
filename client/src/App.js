@@ -70,11 +70,11 @@ function App() {
         e.preventDefault();
 
         // Email validation
-        const emailPattern = /@(spelman\.edu|morehouse\.edu)$/;
+       const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailPattern.test(email)) {
-            setMessage('Email must end with @spelman.edu or @morehouse.edu.');
+            setMessage('Please enter a valid email address.');
             return;
-        }
+}
 
         try {
             const response = await axios.post('/register', { name, email, password });
@@ -176,7 +176,7 @@ function App() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
-                    placeholder="username@spelman.edu"
+                    placeholder="Email"
                 />
             </div>
             <div>
