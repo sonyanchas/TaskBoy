@@ -1,7 +1,8 @@
 const express = require('express');
 const path = require('path');
 const { createClient } = require('@supabase/supabase-js');
-require('dotenv').config();
+// Load environment variables from the server directory .env
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 const multer = require('multer');
 const { ApiError, Client, Environment } = require('square');
 
@@ -256,21 +257,20 @@ app.get('/search', async (req, res) => {
 // NEW: Payment API Endpoints
 // ========================================================
 
-require("dotenv").config();
-const { Stripe } = require("stripe");
+const Stripe = require("stripe");
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-
-const express = require("express");
-const app = express();
 const router = express.Router();
-app.use(express.static("public"));
 
-// // Thin webhook must see the raw body before any JSON/urlencoded parsers run
+// Thin webhook must see the raw body before any JSON/urlencoded parsers run
 app.post(
   "/api/thin-webhook",
   express.raw({ type: "application/json" }),
   async (request, response) => {
+    if (!stripe) {
+      console.warn('Thin webhook called but Stripe not configured');
+      return response.status(503).send('Stripe not configured');
+    }
     // Replace this endpoint secret with your endpoint's unique secret
     // If you are testing with the CLI, find the secret by running 'stripe listen'
     // If you are using an endpoint defined with the API or dashboard, look in your webhook settings
@@ -305,6 +305,7 @@ app.use(express.json());
 
 // Create a sample product and return a price for it
 router.post("/create-product", async (req, res) => {
+  if (!stripe) return res.status(503).json({ error: 'Stripe not configured' });
   const productName = req.body.productName;
   const productDescription = req.body.productDescription;
   const productPrice = req.body.productPrice;
@@ -343,6 +344,7 @@ router.post("/create-product", async (req, res) => {
 
 // Create a Connected Account
 router.post("/create-connect-account", async (req, res) => {
+  if (!stripe) return res.status(503).json({ error: 'Stripe not configured' });
   try {
     // Create a Connect account with the specified controller properties
     const account = await stripe.v2.core.accounts.create({
@@ -380,6 +382,7 @@ router.post("/create-connect-account", async (req, res) => {
 
 // Create Account Link for onboarding
 router.post("/create-account-link", async (req, res) => {
+  if (!stripe) return res.status(503).json({ error: 'Stripe not configured' });
   const accountId = req.body.accountId;
   try {
     const accountLink = await stripe.v2.core.accountLinks.create({
@@ -401,6 +404,7 @@ router.post("/create-account-link", async (req, res) => {
 
 // Get Connected Account Status
 router.get("/account-status/:accountId", async (req, res) => {
+  if (!stripe) return res.status(503).json({ error: 'Stripe not configured' });
   try {
     const account = await stripe.v2.core.accounts.retrieve(
       req.params.accountId,
@@ -432,6 +436,7 @@ router.get("/products/:accountId", async (req, res) => {
   const { accountId } = req.params;
 
   try {
+    if (!stripe) return res.status(503).json({ error: 'Stripe not configured' });
     const prices = await stripe.prices.search({
       query: `metadata['stripeAccount']:'${accountId}' AND active:'true'`,
       expand: ["data.product"],
@@ -457,6 +462,7 @@ router.get("/products/:accountId", async (req, res) => {
 
 // Create checkout session
 router.post("/create-checkout-session", async (req, res) => {
+  if (!stripe) return res.status(503).json({ error: 'Stripe not configured' });
   const { priceId, accountId } = req.body;
 
   // Get the price's type from Stripe
@@ -499,6 +505,7 @@ router.post(
   "/webhook",
   express.raw({ type: "application/json" }),
   (request, response) => {
+    if (!stripe) return response.status(503).send('Stripe not configured');
     let event = request.body;
     // Replace this endpoint secret with your endpoint's unique secret
     // If you are testing with the CLI, find the secret by running 'stripe listen'
@@ -552,6 +559,7 @@ router.post(
 
 // Create a login link for the connected account's dashboard
 router.post("/create-login-link", async (req, res) => {
+  if (!stripe) return res.status(503).json({ error: 'Stripe not configured' });
   const { accountId } = req.body;
   try {
     const loginLink = await stripe.accounts.createLoginLink(accountId);
@@ -562,9 +570,6 @@ router.post("/create-login-link", async (req, res) => {
 });
 
 app.use("/api", router);
-
-app.listen(4242, () => console.log("Server running on port 4242"));
-
 
 // ========================================================
 // Serve React Frontend
