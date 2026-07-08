@@ -1,0 +1,159 @@
+/* Import Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap');
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  background: url('../public/images/marketplace.webp') no-repeat center center fixed;
+  background-size: cover;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* Login Container */
+.App {
+  background: rgba(255, 255, 255, 0.95);
+  padding: 40px;
+  border-radius: 10px;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+  text-align: center;
+  width: 90%;
+  max-width: 450px;
+  margin: 20px;
+}
+
+/* Headings */
+h1 {
+  font-size: 26px;
+  font-weight: 600;
+  color: #2c3e50;
+  margin-bottom: 25px;
+}
+
+h2 {
+  font-size: 22px;
+  font-weight: 600;
+  color: #2c3e50;
+  margin-bottom: 20px;
+}
+
+/* Authentication Tabs */
+.auth-tabs {
+  display: flex;
+  justify-content: space-between;
+  background: #ecf0f1;
+  border-radius: 10px;
+  padding: 5px;
+  margin-bottom: 25px;
+}
+
+.tab-btn {
+  flex: 1;
+  background: none;
+  border: none;
+  font-size: 16px;
+  font-weight: 600;
+  padding: 12px;
+  cursor: pointer;
+  color: #34495e;
+  transition: all 0.2s ease;
+  border-radius: 8px;
+}
+
+/* Active Tab - Clearly Visible */
+.tab-btn.active {
+  background: #3498db;
+  color: white;
+}
+
+/* Hover Effect */
+.tab-btn:hover:not(.active) {
+  background: rgba(52, 152, 219, 0.15);
+}
+
+/* Form Groups */
+form div {
+  margin-bottom: 18px;
+  text-align: left;
+}
+
+/* Labels */
+label {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: #34495e;
+}
+
+/* Input Fields */
+input {
+  width: 100%;
+  padding: 12px 15px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 15px;
+  transition: border 0.2s ease;
+}
+
+input:focus {
+  border-color: #3498db;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+}
+
+/* Form Button */
+button {
+  background: #3498db;
+  color: white;
+  padding: 14px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 600;
+  width: 100%;
+  transition: background 0.2s ease;
+  margin-top: 10px;
+}
+
+button:hover {
+  background: #2980b9;
+}
+
+/* Message Styling */
+.message {
+  margin-top: 20px;
+  padding: 12px;
+  border-radius: 8px;
+  background: #f8f9fa;
+  color: #2c3e50;
+  font-size: 14px;
+  font-weight: 500;
+  border-left: 4px solid #3498db;
+}
+
+/* Verification Form */
+.verification-form {
+  margin-top: 20px;
+  text-align: center;
+}
+
+/* For dashboard mode, ensure proper display */
+.App.dashboard-mode {
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  box-shadow: none;
+  background: transparent;
+}

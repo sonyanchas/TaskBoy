@@ -1,0 +1,418 @@
+/* Import Google Fonts - same as App.css for consistency */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap');
+
+/* General Styles */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body.dashboard-view {
+  font-family: 'Inter', sans-serif;
+  background-color: #f8f9fa;
+  color: #333;
+  display: block;
+  height: auto;
+  padding: 0;
+  margin: 0;
+}
+
+/* Dashboard Container */
+.dashboard {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 30px 20px;
+  background-color: #f8f9fa;
+  min-height: 100vh;
+}
+
+/* Headings */
+.dashboard h2 {
+  font-size: 28px;
+  font-weight: 600;
+  text-align: center;
+  margin-bottom: 25px;
+  color: #2c3e50;
+}
+
+/* Search Section */
+.search-section {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 30px;
+  position: relative;
+  max-width: 600px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.search-section input {
+  width: 100%;
+  padding: 14px 20px;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 16px;
+  transition: all 0.2s ease;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+}
+
+.search-section input:focus {
+  border-color: #3498db;
+  outline: none;
+  box-shadow: 0 2px 15px rgba(52, 152, 219, 0.15);
+}
+
+/* Action Buttons */
+.post-listing-btn {
+  background: #3498db;
+  color: white;
+  border: none;
+  padding: 14px 25px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  display: block;
+  margin: 0 auto 30px;
+  max-width: 220px;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 10px rgba(52, 152, 219, 0.2);
+}
+
+.post-listing-btn:hover {
+  background: #2980b9;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 15px rgba(52, 152, 219, 0.25);
+}
+
+/* Listings Grid */
+.listings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 25px;
+  padding: 10px;
+  justify-content: center;
+  width: 100%;
+  margin: 0 auto 40px;
+}
+
+/* Media Queries for Responsive Grid */
+@media (max-width: 768px) {
+  .listings-grid {
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 20px;
+  }
+}
+
+@media (max-width: 480px) {
+  .listings-grid {
+    grid-template-columns: 1fr;
+    gap: 15px;
+  }
+}
+
+/* Listing Card */
+.listing-card {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  transition: all 0.3s ease;
+  height: 100%;
+}
+
+/* Hover Effect */
+.listing-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12);
+}
+
+.listing-card img {
+  width: 100%;
+  height: 200px;
+  object-fit: cover;
+}
+
+/* Listing Info */
+.listing-info {
+  padding: 16px;
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.listing-info h3 {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: #2c3e50;
+}
+
+.listing-info p {
+  font-size: 14px;
+  color: #666;
+  margin: 4px 0;
+}
+
+.listing-info p:last-child {
+  margin-top: auto;
+  font-weight: 600;
+  color: #3498db;
+  font-size: 16px;
+  padding-top: 8px;
+}
+
+/* Listing Form */
+.listing-form {
+  background: white;
+  padding: 30px;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  max-width: 650px;
+  margin: 0 auto 40px;
+}
+
+.listing-form h3 {
+  font-size: 22px;
+  font-weight: 600;
+  margin-bottom: 20px;
+  color: #2c3e50;
+  text-align: center;
+}
+
+.listing-form form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 15px;
+}
+
+/* Full width fields */
+.listing-form form > :nth-child(1),
+.listing-form form > :nth-child(2),
+.listing-form form > :nth-child(9),
+.listing-form form > :nth-child(10),
+.listing-form form > :nth-child(11),
+.listing-form form > :nth-child(13),
+.listing-form form > :nth-child(14),
+.listing-form form > :nth-child(15),
+.listing-form form > :nth-child(16) {
+  grid-column: 1 / -1;
+}
+
+.listing-form label {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  display: block;
+  color: #34495e;
+}
+
+.listing-form input,
+.listing-form select {
+  width: 100%;
+  padding: 12px 15px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 15px;
+  transition: all 0.2s ease;
+}
+
+.listing-form input:focus,
+.listing-form select:focus {
+  border-color: #3498db;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.15);
+}
+
+/* Date picker styling */
+.react-datepicker-wrapper {
+  width: 100%;
+}
+
+.date-input {
+  width: 100%;
+  padding: 12px 15px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 15px;
+  transition: all 0.2s ease;
+}
+
+.date-input:focus {
+  border-color: #3498db;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.15);
+}
+
+/* File upload styling */
+.file-upload-container {
+  margin-bottom: 15px;
+}
+
+.file-input {
+  background: #f8f9fa;
+  padding: 15px;
+  border: 2px dashed #ddd;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.file-input:hover {
+  border-color: #3498db;
+  background: rgba(52, 152, 219, 0.05);
+}
+
+.image-preview {
+  margin-top: 15px;
+  text-align: center;
+}
+
+.image-preview img {
+  max-width: 100%;
+  max-height: 200px;
+  border-radius: 8px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+}
+
+/* Total price display */
+.total-price {
+  background: rgba(52, 152, 219, 0.1);
+  padding: 15px;
+  border-radius: 8px;
+  font-size: 16px !important;
+  color: #2c3e50 !important;
+  text-align: center;
+  margin: 15px 0 !important;
+  font-weight: 600 !important;
+}
+
+.total-price span {
+  color: #3498db;
+  font-weight: 700;
+  margin-left: 5px;
+}
+
+/* Price display */
+.listing-form p {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 15px 0;
+  color: #2c3e50;
+  text-align: center;
+}
+
+/* Form button */
+.listing-form button {
+  background: #27ae60;
+  color: white;
+  border: none;
+  padding: 14px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-top: 10px;
+  box-shadow: 0 4px 10px rgba(39, 174, 96, 0.2);
+}
+
+.listing-form button:hover:not(:disabled) {
+  background: #219653;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 15px rgba(39, 174, 96, 0.25);
+}
+
+.listing-form button:disabled {
+  background: #95a5a6;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.listing-form button.submitting {
+  position: relative;
+}
+
+.listing-form button.submitting:after {
+  content: "";
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  top: calc(50% - 10px);
+  right: 15px;
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  border-top: 2px solid white;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Logout Button */
+.logout-btn {
+  background: #e74c3c;
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: block;
+  margin: 20px auto 0;
+  max-width: 180px;
+  box-shadow: 0 4px 10px rgba(231, 76, 60, 0.2);
+}
+
+.logout-btn:hover {
+  background: #c0392b;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 15px rgba(231, 76, 60, 0.25);
+}
+
+/* Message display */
+.message {
+  margin-top: 15px;
+  padding: 12px 15px;
+  border-radius: 8px;
+  text-align: center;
+  font-size: 14px;
+  animation: fadeIn 0.3s ease-in-out;
+  font-weight: 500;
+}
+
+.message.success {
+  background-color: rgba(39, 174, 96, 0.15);
+  color: #27ae60;
+  border-left: 4px solid #27ae60;
+}
+
+.message.error {
+  background-color: rgba(231, 76, 60, 0.15);
+  color: #e74c3c;
+  border-left: 4px solid #e74c3c;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Media query for the form on mobile */
+@media (max-width: 600px) {
+  .listing-form form {
+    grid-template-columns: 1fr;
+  }
+  
+  .listing-form {
+    padding: 20px;
+  }
+}
