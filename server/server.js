@@ -4,41 +4,73 @@ const { createClient } = require('@supabase/supabase-js');
 // Load environment variables from the server directory .env
 require('dotenv').config({ path: path.join(__dirname, '.env') });
 const multer = require('multer');
-const { ApiError, Client, Environment } = require('square');
-
-
-
-const { randomUUID } = require('crypto');
+const axios = require('axios');
+const crypto = require('crypto');
 const cors = require('cors');
-
-// const nodemailer = require('nodemailer'); // For confirmation emails
 
 // Initialize Supabase client
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
-// Initialize Square client
-
-const squareClient = new Client({
-  accessToken: process.env.SQUARE_ACCESS_TOKEN,
-  environment: process.env.NODE_ENV === 'production' 
-    ? Environment.Production 
-    : Environment.Sandbox
+// Paystack config
+const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY;
+const PAYSTACK_BASE_URL = 'https://api.paystack.co';
+const paystack = axios.create({
+  baseURL: PAYSTACK_BASE_URL,
+  headers: { Authorization: `Bearer ${PAYSTACK_SECRET_KEY}` },
 });
-// Configure email transporter (if using)
-/*
-const transporter = nodemailer.createTransport({
-  // Configure based on your email provider
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASSWORD
-  }
-});
-*/
 
 const app = express();
-app.use(express.json());
 app.use(cors());
+
+// ========================================================
+// Paystack webhook — must see the RAW body (for signature
+// verification) before express.json() parses anything, so
+// this route + raw parser must be registered before app.use(express.json())
+// ========================================================
+app.post(
+  '/api/paystack-webhook',
+  express.raw({ type: 'application/json' }),
+  async (req, res) => {
+    const signature = req.headers['x-paystack-signature'];
+    const expectedSignature = crypto
+      .createHmac('sha512', PAYSTACK_SECRET_KEY)
+      .update(req.body)
+      .digest('hex');
+
+    if (signature !== expectedSignature) {
+      console.log('⚠️  Paystack webhook signature verification failed.');
+      return res.sendStatus(400);
+    }
+
+    const event = JSON.parse(req.body);
+
+    if (event.event === 'charge.success') {
+      const { reference, status, amount, metadata } = event.data;
+
+      try {
+        // Idempotent update: only flips a booking to 'paid' if it isn't already,
+        // since Paystack may retry webhook delivery
+        const { error } = await supabase
+          .from('bookings')
+          .update({ status: 'paid', updated_at: new Date().toISOString() })
+          .eq('payment_reference', reference)
+          .eq('status', 'pending');
+
+        if (error) console.error('Error updating booking from webhook:', error);
+      } catch (err) {
+        console.error('Webhook processing error:', err);
+      }
+    } else {
+      console.log(`Unhandled Paystack event type: ${event.event}`);
+    }
+
+    res.sendStatus(200);
+  }
+);
+
+// Regular JSON/body parsers for everything else, registered after the webhook route
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // Set up multer for handling file uploads
 const storage = multer.memoryStorage();
@@ -47,27 +79,33 @@ const upload = multer({ storage });
 // Serve static files from React build folder
 app.use(express.static(path.join(__dirname, '../client/build')));
 
+// Helper: look up a Supabase Auth user's UUID from their email
+async function getUserIdByEmail(email) {
+  const { data, error } = await supabase.auth.admin.listUsers();
+  if (error) throw error;
+  const user = data.users.find((u) => u.email === email);
+  return user ? user.id : null;
+}
+
 // ========================================================
 // Authentication Routes using Supabase Auth
 // ========================================================
 
-// Registration endpoint using Supabase Auth
 app.post('/register', async (req, res) => {
     const { name, email, password } = req.body;
     console.log(`Received registration request for email: ${email}`);
 
-    // Email validation
+    // Accept any valid email address (no domain restriction)
     const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailPattern.test(email)) {
         return res.status(400).json({ success: false, message: 'Please enter a valid email address.' });
-}
+    }
 
     try {
-        // Register user in Supabase Auth
         const { data, error } = await supabase.auth.signUp({
             email,
             password,
-            options: { data: { name } } // Store additional user info
+            options: { data: { name } }
         });
 
         if (error) throw error;
@@ -79,7 +117,6 @@ app.post('/register', async (req, res) => {
     }
 });
 
-// Login endpoint
 app.post('/login', async (req, res) => {
     const { email, password } = req.body;
     console.log(`Received login request for email: ${email}`);
@@ -88,7 +125,6 @@ app.post('/login', async (req, res) => {
         const { data, error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
 
-        // Get the user's name from the user metadata
         const name = data.user.user_metadata?.name || 'User';
 
         res.json({ success: true, message: 'Login successful', name, user: data.user });
@@ -98,7 +134,6 @@ app.post('/login', async (req, res) => {
     }
 });
 
-// Email verification using 6-digit code
 app.post('/verify', async (req, res) => {
     const { email, verificationCode } = req.body;
     console.log(`Verifying email: ${email} with code: ${verificationCode}`);
@@ -123,458 +158,289 @@ app.post('/verify', async (req, res) => {
 });
 
 // ========================================================
-// Clothing Listings API
+// Tasker Onboarding (Paystack Subaccounts)
 // ========================================================
 
-// Endpoint to post a new clothing listing
-app.post('/listings', upload.single('image'), async (req, res) => {
-  const { title, size, itemType, condition, washInstructions, startDate, endDate, pricePerDay, totalPrice } = req.body;
-  const { file } = req;
-  const userEmail = req.headers['user-id']; 
-  
-  console.log("Received listing data:", {
-      userEmail,
-      title,
-      size,
-      itemType,
-      condition,
-      washInstructions,
-      startDate,
-      endDate,
-      pricePerDay,
-      hasFile: !!file
-  });
+// List banks so the frontend can render a dropdown instead of asking for a raw bank code
+app.get('/api/banks', async (req, res) => {
+  const { country = 'kenya' } = req.query;
+  try {
+    const response = await paystack.get('/bank', { params: { country } });
+    const banks = response.data.data.map((bank) => ({
+      code: bank.code,
+      name: bank.name,
+    }));
+    res.json({ success: true, banks });
+  } catch (error) {
+    console.error('Error fetching banks:', error.response?.data || error.message);
+    res.status(500).json({ success: false, message: 'Error fetching bank list' });
+  }
+});
+
+// Check whether the current user has already onboarded as a Tasker
+app.get('/api/tasker/status', async (req, res) => {
+  const userEmail = req.headers['user-id'];
+  if (!userEmail) {
+    return res.status(401).json({ success: false, message: 'User authentication required' });
+  }
+
+  try {
+    const userId = await getUserIdByEmail(userEmail);
+    if (!userId) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    const { data, error } = await supabase
+      .from('taskers')
+      .select('user_id')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (error) throw error;
+
+    res.json({ success: true, onboarded: !!data });
+  } catch (error) {
+    console.error('Error checking tasker status:', error);
+    res.status(500).json({ success: false, message: 'Error checking tasker status' });
+  }
+});
+
+// Create a Paystack subaccount for a Tasker and store it
+app.post('/api/tasker/onboard', async (req, res) => {
+  const userEmail = req.headers['user-id'];
+  const { businessName, bankCode, accountNumber } = req.body;
 
   if (!userEmail) {
-      return res.status(401).json({ success: false, message: 'User authentication required' });
+    return res.status(401).json({ success: false, message: 'User authentication required' });
+  }
+  if (!businessName || !bankCode || !accountNumber) {
+    return res.status(400).json({ success: false, message: 'Missing required fields' });
   }
 
   try {
-      // First, get the user UUID from the email
-      const { data: authData, error: authError } = await supabase.auth
-          .admin.listUsers();
-          
-      if (authError) {
-          console.error("Error listing users:", authError);
-          throw authError;
-      }
-      
-      // Find the user with the matching email
-      const user = authData.users.find(u => u.email === userEmail);
-      
-      if (!user) {
-          console.error("User not found with email:", userEmail);
-          return res.status(404).json({ success: false, message: 'User not found' });
-      }
-      
-      const userId = user.id;
-      console.log("Found user ID:", userId);
-      
-      let imageURL = null;
+    const userId = await getUserIdByEmail(userEmail);
+    if (!userId) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
 
-      if (file) {
-          const fileName = `${Date.now()}_${file.originalname}`;
-          console.log("Uploading file:", fileName);
-          
-          const { data: fileData, error: fileError } = await supabase.storage
-              .from('clothing-images')
-              .upload(fileName, file.buffer, { 
-                  contentType: file.mimetype,
-                  upsert: true
-              });
+    // Create the subaccount on Paystack. percentage_charge is your platform's
+    // cut — e.g. 15 means 15% goes to your main account, 85% to the Tasker.
+    const response = await paystack.post('/subaccount', {
+      business_name: businessName,
+      bank_code: bankCode,
+      account_number: accountNumber,
+      percentage_charge: 15,
+    });
 
-          if (fileError) {
-              console.error("File upload error:", fileError);
-              throw fileError;
-          }
-          
-          const { data: publicUrlData } = supabase.storage
-              .from('clothing-images')
-              .getPublicUrl(fileName);
-              
-          imageURL = publicUrlData.publicUrl;
-          console.log("File uploaded successfully, URL:", imageURL);
-      }
+    const subaccountCode = response.data.data.subaccount_code;
+    const accountNumberLast4 = accountNumber.slice(-4);
 
-      console.log("Attempting insert with UUID:", userId);
-      
-      const { data, error } = await supabase
-          .from('listings')
-          .insert([{ 
-              user: userId,
-              title, 
-              size, 
-              itemType, 
-              condition, 
-              washInstructions, 
-              startDate, // Changed from dateAvailable 
-              endDate,   // Added end date
-              pricePerDay, // Changed from price
-              imageURL
-          }])
-          .select();
+    const { error } = await supabase
+      .from('taskers')
+      .upsert({
+        user_id: userId,
+        business_name: businessName,
+        paystack_subaccount_code: subaccountCode,
+        bank_code: bankCode,
+        account_number_last4: accountNumberLast4,
+      });
 
-      if (error) {
-          console.error("Supabase error details:", error);
-          throw error;
-      }
-      
-      console.log("Insert successful, returned data:", data);
-      res.json({ success: true, message: 'Listing posted successfully', listing: data[0] });
+    if (error) throw error;
+
+    res.json({ success: true, message: 'Payout setup complete', subaccountCode });
   } catch (error) {
-      console.error("Full error object:", error);
-      res.status(500).json({ success: false, message: error.message || 'Error posting listing' });
+    console.error('Error onboarding tasker:', error.response?.data || error.message);
+    res.status(500).json({
+      success: false,
+      message: error.response?.data?.message || 'Error setting up payouts',
+    });
   }
 });
 
-// Search Listings Endpoint
-app.get('/search', async (req, res) => {
+// ========================================================
+// Task Listings API (fixed-price services posted by Taskers)
+// ========================================================
+
+app.post('/tasks', upload.single('image'), async (req, res) => {
+  const { title, description, category, location, price } = req.body;
+  const { file } = req;
+  const userEmail = req.headers['user-id'];
+
+  if (!userEmail) {
+    return res.status(401).json({ success: false, message: 'User authentication required' });
+  }
+
+  try {
+    const userId = await getUserIdByEmail(userEmail);
+    if (!userId) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    // Guard: a Tasker must have a Paystack subaccount on file before they can
+    // list a service, otherwise there's no way to ever pay them.
+    const { data: taskerRow, error: taskerError } = await supabase
+      .from('taskers')
+      .select('paystack_subaccount_code')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (taskerError) throw taskerError;
+    if (!taskerRow) {
+      return res.status(412).json({
+        success: false,
+        message: 'Please set up payouts before listing a service',
+      });
+    }
+
+    let imageURL = null;
+    if (file) {
+      const fileName = `${Date.now()}_${file.originalname}`;
+      const { error: fileError } = await supabase.storage
+        .from('task-images')
+        .upload(fileName, file.buffer, { contentType: file.mimetype, upsert: true });
+
+      if (fileError) throw fileError;
+
+      const { data: publicUrlData } = supabase.storage
+        .from('task-images')
+        .getPublicUrl(fileName);
+      imageURL = publicUrlData.publicUrl;
+    }
+
+    const { data, error } = await supabase
+      .from('tasks')
+      .insert([{ tasker_id: userId, title, description, category, location, price, imageURL }])
+      .select();
+
+    if (error) throw error;
+
+    res.json({ success: true, message: 'Service listed successfully', task: data[0] });
+  } catch (error) {
+    console.error('Error posting task:', error);
+    res.status(500).json({ success: false, message: error.message || 'Error posting service' });
+  }
+});
+
+// Search/browse tasks — attaches each Tasker's name and subaccount code so
+// the frontend can go straight into payment without another round trip
+app.get('/tasks/search', async (req, res) => {
   const { query = '' } = req.query;
-  console.log(`Received search request for: ${query}`);
 
   try {
-      let dbQuery = supabase
-          .from('listings')
-          .select('*');
-          
-      // Only add filter if query is not empty
-      if (query.trim()) {
-          dbQuery = dbQuery.or(`title.ilike.%${query}%,size.ilike.%${query}%,itemType.ilike.%${query}%,condition.ilike.%${query}%`);
-      }
+    let dbQuery = supabase.from('tasks').select('*');
 
-      const { data, error } = await dbQuery;
-
-      if (error) throw error;
-
-      res.json({ success: true, listings: data });
-  } catch (error) {
-      console.error('Search error:', error);
-      res.status(500).json({ success: false, message: error.message || 'Error searching listings' });
-  }
-});
-
-// ========================================================
-// NEW: Payment API Endpoints
-// ========================================================
-
-const Stripe = require("stripe");
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-<<<<<<< HEAD
-=======
-
-const app = express();
->>>>>>> f5e3c73ae8ebd6fe3859870027c4e4ab28a8b31d
-const router = express.Router();
-
-// Thin webhook must see the raw body before any JSON/urlencoded parsers run
-app.post(
-  "/api/thin-webhook",
-  express.raw({ type: "application/json" }),
-  async (request, response) => {
-    if (!stripe) {
-      console.warn('Thin webhook called but Stripe not configured');
-      return response.status(503).send('Stripe not configured');
-    }
-    // Replace this endpoint secret with your endpoint's unique secret
-    // If you are testing with the CLI, find the secret by running 'stripe listen'
-    // If you are using an endpoint defined with the API or dashboard, look in your webhook settings
-    // at https://dashboard.stripe.com/webhooks
-    const thinEndpointSecret = "";
-    const signature = request.headers["stripe-signature"];
-    let eventNotif;
-    try {
-      eventNotif = stripe.parseEventNotification(
-        request.body,
-        signature,
-        thinEndpointSecret
+    if (query.trim()) {
+      dbQuery = dbQuery.or(
+        `title.ilike.%${query}%,category.ilike.%${query}%,location.ilike.%${query}%,description.ilike.%${query}%`
       );
-    } catch (err) {
-      console.log(`⚠️  Webhook signature verification failed.`, err.message);
-      return response.sendStatus(400);
     }
 
-    if (eventNotif.type === "v2.account.created") {
-      await eventNotif.fetchRelatedObject();
-      await eventNotif.fetchEvent();
-    } else {
-      console.log(`Unhandled event type ${eventNotif.type}.`);
+    const { data: tasks, error } = await dbQuery;
+    if (error) throw error;
+
+    // tasks.tasker_id and taskers.user_id both reference auth.users, but
+    // there's no direct FK between tasks and taskers, so Supabase can't
+    // auto-embed this join — fetch taskers separately and merge in JS.
+    const taskerIds = [...new Set(tasks.map((t) => t.tasker_id))];
+    const { data: taskerRows, error: taskerError } = await supabase
+      .from('taskers')
+      .select('user_id, business_name, paystack_subaccount_code')
+      .in('user_id', taskerIds);
+
+    if (taskerError) throw taskerError;
+
+    const taskerMap = Object.fromEntries(
+      taskerRows.map((t) => [t.user_id, t])
+    );
+
+    const enrichedTasks = tasks.map((task) => ({
+      ...task,
+      taskerName: taskerMap[task.tasker_id]?.business_name || 'Unknown Tasker',
+      taskerSubaccountCode: taskerMap[task.tasker_id]?.paystack_subaccount_code || null,
+    }));
+
+    res.json({ success: true, tasks: enrichedTasks });
+  } catch (error) {
+    console.error('Search error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Error searching tasks' });
+  }
+});
+
+// ========================================================
+// Payment API (Paystack)
+// ========================================================
+
+// Initialize a transaction with a subaccount split, and create a pending
+// booking record so we have something to update once payment is confirmed
+app.post('/api/initialize-transaction', async (req, res) => {
+  const { amount, email, taskId, subaccount } = req.body;
+
+  if (!amount || !email || !taskId || !subaccount) {
+    return res.status(400).json({ success: false, message: 'Missing required fields' });
+  }
+
+  try {
+    const customerId = await getUserIdByEmail(email);
+
+    const { data: taskRow, error: taskError } = await supabase
+      .from('tasks')
+      .select('tasker_id, price')
+      .eq('id', taskId)
+      .single();
+    if (taskError) throw taskError;
+
+    const response = await paystack.post('/transaction/initialize', {
+      email,
+      amount,
+      subaccount,
+      metadata: { taskId },
+    });
+
+    const { access_code, reference } = response.data.data;
+
+    const { error: bookingError } = await supabase.from('bookings').insert([
+      {
+        task_id: taskId,
+        tasker_id: taskRow.tasker_id,
+        customer_id: customerId,
+        amount: amount / 100, // convert back from subunits to KES
+        payment_reference: reference,
+        status: 'pending',
+      },
+    ]);
+    if (bookingError) throw bookingError;
+
+    res.json({ success: true, access_code, reference });
+  } catch (error) {
+    console.error('Error initializing transaction:', error.response?.data || error.message);
+    res.status(500).json({ success: false, message: 'Error initializing payment' });
+  }
+});
+
+// Verify a transaction directly (used as a fallback/confirmation alongside the webhook)
+app.get('/api/verify-transaction/:reference', async (req, res) => {
+  const { reference } = req.params;
+
+  try {
+    const response = await paystack.get(`/transaction/verify/${reference}`);
+    const { status } = response.data.data;
+
+    if (status === 'success') {
+      const { error } = await supabase
+        .from('bookings')
+        .update({ status: 'paid', updated_at: new Date().toISOString() })
+        .eq('payment_reference', reference)
+        .eq('status', 'pending');
+
+      if (error) console.error('Error updating booking after verify:', error);
     }
 
-    response.send();
-  }
-);
-
-app.use(express.urlencoded({ extended: true }));
-app.use(express.json());
-
-// Create a sample product and return a price for it
-router.post("/create-product", async (req, res) => {
-  if (!stripe) return res.status(503).json({ error: 'Stripe not configured' });
-  const productName = req.body.productName;
-  const productDescription = req.body.productDescription;
-  const productPrice = req.body.productPrice;
-  const accountId = req.body.accountId; // Get the connected account ID
-
-  try {
-    // Create the product on the platform
-    const product = await stripe.products.create(
-      {
-        name: productName,
-        description: productDescription,
-        metadata: { stripeAccount: accountId }
-      }
-    );
-
-    // Create a price for the product on the platform
-    const price = await stripe.prices.create(
-      {
-        product: product.id,
-        unit_amount: productPrice,
-        currency: "usd",
-        metadata: { stripeAccount: accountId }
-      },
-    );
-
-    res.json({
-      productName: productName,
-      productDescription: productDescription,
-      productPrice: productPrice,
-      priceId: price.id,
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.json({ success: true, status });
+  } catch (error) {
+    console.error('Error verifying transaction:', error.response?.data || error.message);
+    res.status(500).json({ success: false, message: 'Error verifying payment' });
   }
 });
-
-// Create a Connected Account
-router.post("/create-connect-account", async (req, res) => {
-  if (!stripe) return res.status(503).json({ error: 'Stripe not configured' });
-  try {
-    // Create a Connect account with the specified controller properties
-    const account = await stripe.v2.core.accounts.create({
-      display_name: req.body.email,
-      contact_email: req.body.email,
-      dashboard: "express",
-      defaults: {
-        responsibilities: {
-          fees_collector: "application",
-          losses_collector: "application",
-        },
-      },
-      identity: {
-        country: "US",
-        entity_type: "company",
-      },
-      configuration: {
-        recipient: {
-          capabilities: {
-            stripe_balance: {
-              stripe_transfers: {
-                requested: true,
-              },
-            },
-          },
-        },
-      },
-    });
-
-    res.json({ accountId: account.id });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Create Account Link for onboarding
-router.post("/create-account-link", async (req, res) => {
-  if (!stripe) return res.status(503).json({ error: 'Stripe not configured' });
-  const accountId = req.body.accountId;
-  try {
-    const accountLink = await stripe.v2.core.accountLinks.create({
-      account: accountId,
-      use_case: {
-        type: 'account_onboarding',
-        account_onboarding: {
-          configurations: ['recipient'],
-          refresh_url: 'https://example.com',
-          return_url: `https://example.com?accountId=${accountId}`,
-        },
-      },
-    });
-    res.json({ url: accountLink.url });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Get Connected Account Status
-router.get("/account-status/:accountId", async (req, res) => {
-  if (!stripe) return res.status(503).json({ error: 'Stripe not configured' });
-  try {
-    const account = await stripe.v2.core.accounts.retrieve(
-      req.params.accountId,
-      {
-        include: ['requirements', 'configuration.recipient'],
-      }
-    );
-    const payoutsEnabled = account.configuration?.recipient?.capabilities?.stripe_balance?.payouts?.status === 'active'
-    const chargesEnabled = account.configuration?.recipient?.capabilities?.stripe_balance?.stripe_transfers?.status === 'active'
-
-    // No pending requirments
-    const summaryStatus = account.requirements?.summary?.minimum_deadline?.status
-    const detailsSubmitted = !summaryStatus || summaryStatus === 'eventually_due'
-
-    res.json({
-      id: account.id,
-      payoutsEnabled,
-      chargesEnabled,
-      detailsSubmitted,
-      requirements: account.requirements?.entries,
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Fetch products for a specific account
-router.get("/products/:accountId", async (req, res) => {
-  const { accountId } = req.params;
-
-  try {
-    if (!stripe) return res.status(503).json({ error: 'Stripe not configured' });
-    const prices = await stripe.prices.search({
-      query: `metadata['stripeAccount']:'${accountId}' AND active:'true'`,
-      expand: ["data.product"],
-      limit: 100,
-    });
-
-    res.json(
-      prices.data.map((price) => ({
-        id: price.product.id,
-        name: price.product.name,
-        description: price.product.description,
-        price: price.unit_amount,
-        priceId: price.id,
-        period: price.recurring ? price.recurring.interval : null,
-        image: "https://i.imgur.com/6Mvijcm.png",
-      }))
-    );
-  } catch (err) {
-    console.error("Error fetching prices:", err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Create checkout session
-router.post("/create-checkout-session", async (req, res) => {
-  if (!stripe) return res.status(503).json({ error: 'Stripe not configured' });
-  const { priceId, accountId } = req.body;
-
-  // Get the price's type from Stripe
-  const price = await stripe.prices.retrieve(priceId);
-  const priceType = price.type;
-  const mode = priceType === 'recurring' ? 'subscription' : 'payment';
-
-  const session = await stripe.checkout.sessions.create({
-    line_items: [
-      {
-        price: priceId,
-        quantity: 1,
-      },
-    ],
-    mode: mode,
-    // Defines where Stripe will redirect a customer after successful payment
-    success_url: `${process.env.DOMAIN}/done?session_id={CHECKOUT_SESSION_ID}`,
-    // Defines where Stripe will redirect if a customer cancels payment
-    cancel_url: `${process.env.DOMAIN}`,
-    ...(mode === 'subscription' ? {
-      subscription_data: {
-        transfer_data: {
-          destination: accountId,
-        },
-      },
-    } : {
-      payment_intent_data: {
-        transfer_data: {
-          destination: accountId,
-        },
-      },
-    }),
-  });
-
-  // Redirect to the Stripe hosted checkout URL
-  res.redirect(303, session.url);
-});
-
-router.post(
-  "/webhook",
-  express.raw({ type: "application/json" }),
-  (request, response) => {
-    if (!stripe) return response.status(503).send('Stripe not configured');
-    let event = request.body;
-    // Replace this endpoint secret with your endpoint's unique secret
-    // If you are testing with the CLI, find the secret by running 'stripe listen'
-    // If you are using an endpoint defined with the API or dashboard, look in your webhook settings
-    // at https://dashboard.stripe.com/webhooks
-    const endpointSecret = "";
-
-    // Only verify the event if you have an endpoint secret defined.
-    // Otherwise use the basic event deserialized with JSON.parse
-    if (endpointSecret) {
-      const signature = request.headers["stripe-signature"];
-      try {
-        event = stripe.webhooks.constructEvent(
-          request.body,
-          signature,
-          endpointSecret
-        );
-      } catch (err) {
-        console.log(`⚠️  Webhook signature verification failed.`, err.message);
-        return response.sendStatus(400);
-      }
-    }
-
-    let stripeObject;
-    let status;
-    // Handle the event
-    switch (event.type) {
-      case "checkout.session.completed":
-        stripeObject = event.data.object;
-        status = stripeObject.status;
-        console.log(`Checkout Session status is ${status}.`);
-        // Then define and call a method to handle the subscription deleted.
-        // handleCheckoutSessionCompleted(stripeObject);
-        break;
-      case "checkout.session.async_payment_failed":
-        stripeObject = event.data.object;
-        status = stripeObject.status;
-        console.log(`Checkout Session status is ${status}.`);
-        // Then define and call a method to handle the subscription deleted.
-        // handleCheckoutSessionFailed(stripeObject);
-        break;
-
-      default:
-        // Unexpected event type
-        console.log(`Unhandled event type ${event.type}.`);
-    }
-    // Return a 200 response to acknowledge receipt of the event
-    response.send();
-  }
-);
-
-// Create a login link for the connected account's dashboard
-router.post("/create-login-link", async (req, res) => {
-  if (!stripe) return res.status(503).json({ error: 'Stripe not configured' });
-  const { accountId } = req.body;
-  try {
-    const loginLink = await stripe.accounts.createLoginLink(accountId);
-    res.json({ url: loginLink.url });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.use("/api", router);
 
 // ========================================================
 // Serve React Frontend
