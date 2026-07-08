@@ -11,7 +11,8 @@
         "path": "^0.12.7",
         "pg": "^8.13.3",
         "react-dom": "^19.0.0",
-        "square": "^20.0.0"
+        "square": "^20.0.0",
+        "stripe": "^22.3.0"
     },
     "scripts": {
         "start": "node server/server.js",

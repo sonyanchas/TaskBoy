@@ -1,13 +1,13 @@
-# Campus Closet - Clothing Rental Marketplace
+# Taskboy - Task Marketplace
 
-Taskboy  is a web application that enables Kenyan residents to provide services to each other. This application includes user authentication, listing management, and payment processing with Stripe.
+Taskboy is a web application that enables Kenyan residents to provide services to each other. This application includes user authentication, listing management, and payment processing with Stripe.
 
 ## Features
 
 - User authentication with email verification
 - Create, view, and search clothing listings
 - Rental date selection and availability management
-- Secure payment processing via Square
+- Secure payment processing via Stripe
 - Responsive UI for both desktop and mobile
 
 ## Tech Stack
@@ -26,7 +26,7 @@ Taskboy  is a web application that enables Kenyan residents to provide services 
 - Node.js (v14 or higher)
 - npm or yarn
 - Supabase account
-- Square Developer account
+- Stripe account
 
 ### Environment Variables
 
@@ -37,7 +37,7 @@ Create a `.env` file in the server directory with the following variables:
 SUPABASE_URL=your_supabase_url
 SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
 
-# Square API Credentials (for payment processing)
+# Stripe API Credentials (for payment processing)
 SQUARE_ACCESS_TOKEN=your_square_sandbox_access_token
 
 # Server Configuration
