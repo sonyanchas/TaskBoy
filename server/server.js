@@ -22,6 +22,48 @@ const paystack = axios.create({
 const app = express();
 app.use(cors());
 
+// Email support (optional): requires SMTP env vars: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, FROM_EMAIL
+const nodemailer = require('nodemailer');
+let mailTransporter = null;
+if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
+  mailTransporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: Number(process.env.SMTP_PORT) || 587,
+    secure: process.env.SMTP_SECURE === 'true',
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
+  });
+} else {
+  console.warn('SMTP not configured — booking emails will not be sent.');
+}
+
+async function sendEmail({ to, subject, text, html }) {
+  if (!mailTransporter) {
+    console.log('Skipping email (SMTP not configured):', subject, to);
+    return;
+  }
+  try {
+    const from = process.env.FROM_EMAIL || process.env.SMTP_USER;
+    await mailTransporter.sendMail({ from, to, subject, text, html });
+    console.log('Email sent:', subject, '→', to);
+  } catch (err) {
+    console.error('Error sending email:', err);
+  }
+}
+
+async function getUserById(userId) {
+  try {
+    const { data, error } = await supabase.auth.admin.listUsers();
+    if (error) throw error;
+    return data.users.find((u) => u.id === userId) || null;
+  } catch (err) {
+    console.error('getUserById error:', err);
+    return null;
+  }
+}
+
 // ========================================================
 // Paystack webhook — must see the RAW body (for signature
 // verification) before express.json() parses anything, so
@@ -49,14 +91,44 @@ app.post(
 
       try {
         // Idempotent update: only flips a booking to 'paid' if it isn't already,
-        // since Paystack may retry webhook delivery
-        const { error } = await supabase
+        // since Paystack may retry webhook delivery. Return the updated row.
+        const { data: updatedBooking, error } = await supabase
           .from('bookings')
           .update({ status: 'paid', updated_at: new Date().toISOString() })
           .eq('payment_reference', reference)
-          .eq('status', 'pending');
+          .eq('status', 'pending')
+          .select()
+          .single();
 
-        if (error) console.error('Error updating booking from webhook:', error);
+        if (error) {
+          console.error('Error updating booking from webhook:', error);
+        } else if (updatedBooking) {
+          // Notify customer and tasker that payment succeeded and booking is confirmed
+          try {
+            const customer = await getUserById(updatedBooking.customer_id);
+            const tasker = await getUserById(updatedBooking.tasker_id);
+
+            if (customer?.email) {
+              await sendEmail({
+                to: customer.email,
+                subject: 'Payment received — booking confirmed',
+                text: `We received payment for your booking (reference: ${reference}). The Tasker will contact you to schedule.`,
+                html: `<p>We received payment for your booking (reference: <code>${reference}</code>).</p><p>The Tasker will contact you to schedule.</p>`,
+              });
+            }
+
+            if (tasker?.email) {
+              await sendEmail({
+                to: tasker.email,
+                subject: 'You have a new paid booking',
+                text: `A customer has paid for booking ${updatedBooking.id}. Please reach out to arrange scheduling.`,
+                html: `<p>A customer has paid for booking <strong>${updatedBooking.id}</strong>. Please reach out to arrange scheduling.</p>`,
+              });
+            }
+          } catch (notifyErr) {
+            console.error('Error sending booking confirmation emails:', notifyErr);
+          }
+        }
       } catch (err) {
         console.error('Webhook processing error:', err);
       }
@@ -409,17 +481,34 @@ app.post('/api/initialize-transaction', async (req, res) => {
 
     const { access_code, reference } = response.data.data;
 
-    const { error: bookingError } = await supabase.from('bookings').insert([
-      {
-        task_id: taskId,
-        tasker_id: taskRow.tasker_id,
-        customer_id: customerId,
-        amount: amount / 100, // convert back from subunits to KES
-        payment_reference: reference,
-        status: 'pending',
-      },
-    ]);
+    const { data: bookingData, error: bookingError } = await supabase
+      .from('bookings')
+      .insert([
+        {
+          task_id: taskId,
+          tasker_id: taskRow.tasker_id,
+          customer_id: customerId,
+          amount: amount / 100, // convert back from subunits to KES
+          payment_reference: reference,
+          status: 'pending',
+        },
+      ])
+      .select()
+      .single();
+
     if (bookingError) throw bookingError;
+
+    // Send a notification email to the customer that the booking was created
+    try {
+      await sendEmail({
+        to: email,
+        subject: 'Booking received — pending payment',
+        text: `Your booking for task ${taskId} is pending payment. Reference: ${reference}`,
+        html: `<p>Your booking for task <strong>${taskId}</strong> is pending payment.</p><p>Reference: <code>${reference}</code></p>`,
+      });
+    } catch (err) {
+      console.error('Error sending booking created email:', err);
+    }
 
     res.json({ success: true, access_code, reference });
   } catch (error) {
