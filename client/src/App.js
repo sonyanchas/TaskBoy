@@ -106,16 +106,8 @@ function App() {
     };
 
     const handleVerifyEmail = async () => {
-        try {
-            const response = await axios.post('/verify', { email, verificationCode });
-            setMessage(response.data.message || 'Email verified successfully!');
-            
-            if (response.data.success) {
-                setIsVerified(true); // Show dashboard
-            }
-        } catch (error) {
-            setMessage('Invalid verification code.');
-        }
+        // Verification via code is not currently used — keep as a no-op placeholder.
+        setMessage('Please check your email and click the verification link sent to you.');
     };
 
     const handleLogout = () => {
@@ -193,18 +185,10 @@ function App() {
     );
 
     const renderVerificationForm = () => (
-        <div className="verification-form">
-            <h2>Verify Your Email</h2>
-            <div>
-                <label>Enter Verification Code</label>
-                <input
-                    type="text"
-                    value={verificationCode}
-                    onChange={(e) => setVerificationCode(e.target.value)}
-                    required
-                />
-            </div>
-            <button onClick={handleVerifyEmail}>Verify</button>
+        <div className="verification-confirmation">
+            <h2>Check your email</h2>
+            <p>Please click the verification link we sent to your inbox to activate your account.</p>
+            <button onClick={() => { setIsEmailSent(false); setAuthMode('login'); setMessage('You can now log in after verifying via email.'); }}>Back to Login</button>
         </div>
     );
 
@@ -215,7 +199,7 @@ function App() {
         <div className={`App ${isVerified ? 'dashboard-mode' : ''}`}>
             {!isVerified ? (
                 <>
-                    <h1>Welcome to Campus Closet</h1>
+                    <h1>Welcome to TaskBoy</h1>
                     
                     {isEmailSent ? (
                         renderVerificationForm()

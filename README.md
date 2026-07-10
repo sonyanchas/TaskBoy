@@ -197,8 +197,8 @@ campus-closet/
 │   ├── src/                    # Source files
 │   │   ├── App.js              # Main App component 
 │   │   ├── Dashboard.js        # Dashboard component
-│   │   ├── PostListingForm.js  # Form for creating listings
-│   │   ├── ListingDetailModal.js # Modal for rental & payment
+│   │   ├── PostTaskForm.js  # Form for creating tasks
+│   │   ├── TaskBookingModal.js # Modal for taska & payment
 │   │   ├── App.css             # Main styles
 │   │   └── Dashboard.css       # Dashboard styles
 │   └── package.json            # Frontend dependencies

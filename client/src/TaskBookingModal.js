@@ -47,14 +47,20 @@ function TaskBookingModal({ task, onClose, userEmail }) {
   // Step 2: ask the backend to initialize the transaction (this is where
   // the subaccount split + amount get locked in server-side, so the
   // client can't tamper with the price before paying)
-  useEffect(() => {
-    initializeTransaction();
+    useEffect(() => {
+    if (task && task.price !== undefined && task.price !== null) {
+      initializeTransaction();
+    }
   }, []);
 
   const initializeTransaction = async () => {
     try {
+      // Ensure price is a number (some tasks come from the DB as strings)
+      const priceNum = Number(task.price);
+      if (Number.isNaN(priceNum)) throw new Error('Invalid task price');
+
       const response = await axios.post('/api/initialize-transaction', {
-        amount: Math.round(task.price * 100), // Paystack expects the amount in kobo/subunits
+        amount: Math.round(priceNum * 100), // Paystack expects the amount in kobo/subunits
         email: userEmail,
         taskId: task.id,
         subaccount: task.taskerSubaccountCode,
@@ -126,7 +132,7 @@ function TaskBookingModal({ task, onClose, userEmail }) {
           <h2>{task.title}</h2>
           <p className="task-description">{task.description}</p>
           <p><strong>Tasker:</strong> {task.taskerName}</p>
-          <p className="task-price"><strong>Price:</strong> KES {task.price.toFixed(2)}</p>
+          <p className="task-price"><strong>Price:</strong> KES {(Number(task.price) || 0).toFixed(2)}</p>
 
           {paymentStatus !== 'success' && (
             <div className="payment-section">
@@ -137,7 +143,7 @@ function TaskBookingModal({ task, onClose, userEmail }) {
               <button
                 onClick={handlePayment}
                 className="pay-button"
-                disabled={paymentStatus === 'processing' || paymentStatus === 'initial'}
+                disabled={paymentStatus === 'processing' || paymentStatus === 'initial' || !!errorMessage}
               >
                 {paymentStatus === 'processing'
                   ? 'Processing...'

@@ -102,18 +102,25 @@ app.post('/register', async (req, res) => {
     }
 
     try {
-        const { data, error } = await supabase.auth.signUp({
-            email,
-            password,
-            options: { data: { name } }
-        });
+      // Use the Admin API (service role key) to create the user server-side.
+      // This avoids client-side signUp fetch paths and works from trusted servers.
+      const { data, error } = await supabase.auth.admin.createUser({
+        email,
+        password,
+        user_metadata: { name },
+        // Auto-confirm for local/dev convenience so the user can login immediately.
+        email_confirm: true,
+      });
 
-        if (error) throw error;
+      if (error) throw error;
 
-        res.json({ success: true, message: 'Registration successful. Check your email for verification.' });
+      res.json({ success: true, message: 'Registration created. Please check your email to verify the account if verification is enabled.' });
     } catch (error) {
         console.error('Registration error:', error);
-        res.status(500).json({ success: false, message: error.message || 'Error registering user' });
+         // Provide a clearer message for debugging while avoiding sensitive data.
+         const msg = (error && (error.message || error.toString())) || 'Error registering user';
+         const statusCode = error && error.status && Number.isInteger(error.status) ? error.status : 500;
+         res.status(statusCode).json({ success: false, message: msg });
     }
 });
 
@@ -130,7 +137,9 @@ app.post('/login', async (req, res) => {
         res.json({ success: true, message: 'Login successful', name, user: data.user });
     } catch (error) {
         console.error('Login error:', error);
-        res.status(401).json({ success: false, message: 'Invalid email or password' });
+         const msg = (error && (error.message || error.toString())) || 'Invalid email or password';
+         const statusCode = error && error.status && Number.isInteger(error.status) ? error.status : 401;
+         res.status(statusCode).json({ success: false, message: msg });
     }
 });
 
@@ -153,7 +162,9 @@ app.post('/verify', async (req, res) => {
         res.json({ success: true, message: 'Email verified successfully' });
     } catch (error) {
         console.error('Verification error:', error);
-        res.status(500).json({ success: false, message: 'Error verifying email' });
+         const msg = (error && (error.message || error.toString())) || 'Error verifying email';
+         const statusCode = error && error.status && Number.isInteger(error.status) ? error.status : 500;
+         res.status(statusCode).json({ success: false, message: msg });
     }
 });
 
