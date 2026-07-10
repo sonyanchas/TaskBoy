@@ -92,12 +92,17 @@ function Dashboard({ name, email, onLogout }) {
         }
     };
 
-    // Load Paystack Inline SDK once when the component mounts
+    // Load Paystack Inline SDK once when the component mounts.
+    // Note: intentionally no cleanup/removal of the script tag — third-party
+    // SDK scripts like this should persist for the page's lifetime. Removing
+    // it on unmount races with React Strict Mode's double-invoke of effects
+    // in development and can throw an opaque cross-origin "Script error."
     useEffect(() => {
-        if (!window.PaystackPop) {
+        if (!window.PaystackPop && !document.querySelector('script[data-paystack]')) {
             const script = document.createElement('script');
-            script.src = 'https://js.paystack.co/v1/inline.js';
+            script.src = 'https://js.paystack.co/v2/inline.js';
             script.async = true;
+            script.dataset.paystack = 'true';
             script.onload = () => {
                 console.log('Paystack SDK loaded');
             };
@@ -105,10 +110,6 @@ function Dashboard({ name, email, onLogout }) {
                 console.error('Failed to load Paystack SDK');
             };
             document.body.appendChild(script);
-
-            return () => {
-                document.body.removeChild(script);
-            };
         }
     }, []);
 

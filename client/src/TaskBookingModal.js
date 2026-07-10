@@ -13,7 +13,7 @@ import './TaskBookingModal.css';
 //   taskerSubaccountCode: 'ACCT_xxxxxxxxxx' // Tasker's Paystack subaccount
 // }
 
-const PAYSTACK_SCRIPT_URL = 'https://js.paystack.co/v1/inline.js';
+const PAYSTACK_SCRIPT_URL = 'https://js.paystack.co/v2/inline.js';
 
 function TaskBookingModal({ task, onClose, userEmail }) {
   const [accessCode, setAccessCode] = useState(null);
@@ -22,15 +22,29 @@ function TaskBookingModal({ task, onClose, userEmail }) {
   const [errorMessage, setErrorMessage] = useState('');
   const scriptLoadedRef = useRef(false);
 
-  // Step 1: load the Paystack Inline script once
+  // Step 1: load the Paystack Inline script once.
+  // Note: intentionally no cleanup/removal of the script tag — see Dashboard.jsx
+  // for why removing it on unmount causes an opaque cross-origin Script error
+  // under React Strict Mode's double-invoke of effects in development.
   useEffect(() => {
     if (window.PaystackPop) {
       scriptLoadedRef.current = true;
       return;
     }
+    if (document.querySelector('script[data-paystack]')) {
+      // Already injected (e.g. by Dashboard) — just wait for it to finish loading
+      const checkLoaded = setInterval(() => {
+        if (window.PaystackPop) {
+          scriptLoadedRef.current = true;
+          clearInterval(checkLoaded);
+        }
+      }, 100);
+      return () => clearInterval(checkLoaded);
+    }
     const script = document.createElement('script');
     script.src = PAYSTACK_SCRIPT_URL;
     script.async = true;
+    script.dataset.paystack = 'true';
     script.onload = () => {
       scriptLoadedRef.current = true;
     };
@@ -38,10 +52,6 @@ function TaskBookingModal({ task, onClose, userEmail }) {
       setErrorMessage('Could not load payment provider. Please refresh and try again.');
     };
     document.body.appendChild(script);
-
-    return () => {
-      document.body.removeChild(script);
-    };
   }, []);
 
   // Step 2: ask the backend to initialize the transaction (this is where
