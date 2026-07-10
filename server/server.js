@@ -1,8 +1,11 @@
 const express = require('express');
 const path = require('path');
 const { createClient } = require('@supabase/supabase-js');
-// Load environment variables from the server directory .env
-require('dotenv').config({ path: path.join(__dirname, '.env') });
+// Load environment variables: root .env first, then server/.env overrides if present.
+const dotenv = require('dotenv');
+const rootEnvPath = path.join(__dirname, '..', '.env');
+dotenv.config({ path: rootEnvPath });
+dotenv.config({ path: path.join(__dirname, '.env') });
 const multer = require('multer');
 const axios = require('axios');
 const crypto = require('crypto');
@@ -22,36 +25,9 @@ const paystack = axios.create({
 const app = express();
 app.use(cors());
 
-// Email support (optional): requires SMTP env vars: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, FROM_EMAIL
-const nodemailer = require('nodemailer');
-let mailTransporter = null;
-if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
-  mailTransporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT) || 587,
-    secure: process.env.SMTP_SECURE === 'true',
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
-  });
-} else {
-  console.warn('SMTP not configured — booking emails will not be sent.');
-}
-
-async function sendEmail({ to, subject, text, html }) {
-  if (!mailTransporter) {
-    console.log('Skipping email (SMTP not configured):', subject, to);
-    return;
-  }
-  try {
-    const from = process.env.FROM_EMAIL || process.env.SMTP_USER;
-    await mailTransporter.sendMail({ from, to, subject, text, html });
-    console.log('Email sent:', subject, '→', to);
-  } catch (err) {
-    console.error('Error sending email:', err);
-  }
-}
+// Email sending has been disabled. Removed SMTP/nodemailer support to simplify
+// local development and avoid requiring domain verification for transactional
+// email providers. Notification points below now log intents instead of sending.
 
 async function getUserById(userId) {
   try {
@@ -109,21 +85,11 @@ app.post(
             const tasker = await getUserById(updatedBooking.tasker_id);
 
             if (customer?.email) {
-              await sendEmail({
-                to: customer.email,
-                subject: 'Payment received — booking confirmed',
-                text: `We received payment for your booking (reference: ${reference}). The Tasker will contact you to schedule.`,
-                html: `<p>We received payment for your booking (reference: <code>${reference}</code>).</p><p>The Tasker will contact you to schedule.</p>`,
-              });
+              console.log('Email disabled: would notify customer', customer.email, 'about paid booking', updatedBooking.id);
             }
 
             if (tasker?.email) {
-              await sendEmail({
-                to: tasker.email,
-                subject: 'You have a new paid booking',
-                text: `A customer has paid for booking ${updatedBooking.id}. Please reach out to arrange scheduling.`,
-                html: `<p>A customer has paid for booking <strong>${updatedBooking.id}</strong>. Please reach out to arrange scheduling.</p>`,
-              });
+              console.log('Email disabled: would notify tasker', tasker.email, 'about paid booking', updatedBooking.id);
             }
           } catch (notifyErr) {
             console.error('Error sending booking confirmation emails:', notifyErr);
@@ -499,16 +465,8 @@ app.post('/api/initialize-transaction', async (req, res) => {
     if (bookingError) throw bookingError;
 
     // Send a notification email to the customer that the booking was created
-    try {
-      await sendEmail({
-        to: email,
-        subject: 'Booking received — pending payment',
-        text: `Your booking for task ${taskId} is pending payment. Reference: ${reference}`,
-        html: `<p>Your booking for task <strong>${taskId}</strong> is pending payment.</p><p>Reference: <code>${reference}</code></p>`,
-      });
-    } catch (err) {
-      console.error('Error sending booking created email:', err);
-    }
+    // Email sending disabled — log the intent instead of sending an email
+    console.log('Email disabled: would notify', email, 'that booking', bookingData.id || '(unknown)', 'is pending payment with reference', reference);
 
     res.json({ success: true, access_code, reference });
   } catch (error) {
