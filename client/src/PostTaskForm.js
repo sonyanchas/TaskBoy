@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import './Dashboard.css'; // Reusing Dashboard styles
 
-function PostTaskForm({ email, onClose }) {
+function PostTaskForm({ email, onClose, onTaskPosted }) {
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [category, setCategory] = useState('cleaning');
@@ -77,6 +77,10 @@ function PostTaskForm({ email, onClose }) {
             setPrice('');
             setImage(null);
             setPreviewUrl('');
+
+            if (onTaskPosted) {
+                onTaskPosted();
+            }
 
             // Close form after delay
             setTimeout(() => {

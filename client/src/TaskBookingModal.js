@@ -13,7 +13,7 @@ import './TaskBookingModal.css';
 //   taskerSubaccountCode: 'ACCT_xxxxxxxxxx' // Tasker's Paystack subaccount
 // }
 
-const PAYSTACK_SCRIPT_URL = 'https://js.paystack.co/v1/inline.js';
+const PAYSTACK_SCRIPT_URL = 'https://js.paystack.co/v2/inline.js';
 
 function TaskBookingModal({ task, onClose, userEmail }) {
   const [accessCode, setAccessCode] = useState(null);
@@ -55,6 +55,14 @@ function TaskBookingModal({ task, onClose, userEmail }) {
 
   const initializeTransaction = async () => {
     try {
+      // Ensure the Tasker has a valid subaccount code before contacting backend.
+      // Paystack will reject invalid subaccount values; surface a clear message
+      // to the user instead of attempting the call.
+      const subaccount = task?.taskerSubaccountCode;
+      if (!subaccount || typeof subaccount !== 'string') {
+        setErrorMessage('This Tasker has not set up payouts yet; payment cannot be initialized.');
+        return;
+      }
       // Ensure price is a number (some tasks come from the DB as strings)
       const priceNum = Number(task.price);
       if (Number.isNaN(priceNum)) throw new Error('Invalid task price');
@@ -70,7 +78,10 @@ function TaskBookingModal({ task, onClose, userEmail }) {
       setReference(response.data.reference);
       setPaymentStatus('ready');
     } catch (error) {
-      setErrorMessage('Could not initialize payment. Please try again.');
+      // Surface Paystack/backend messages when available to aid troubleshooting.
+      const serverMessage = error?.response?.data?.message || error?.message;
+      setErrorMessage(serverMessage || 'Could not initialize payment. Please try again.');
+      console.error('initializeTransaction error:', error?.response || error?.message || error);
     }
   };
 

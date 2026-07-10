@@ -16,21 +16,22 @@ function Dashboard({ name, email, onLogout }) {
     const [error, setError] = useState('');
     const [selectedTask, setSelectedTask] = useState(null);
 
+    const fetchTasks = async (query = '') => {
+        setIsLoading(true);
+        try {
+            const response = await axios.get(`/tasks/search?query=${encodeURIComponent(query)}`);
+            setTasks(response.data.tasks || []);
+            setFilteredResults(response.data.tasks || []);
+            setError('');
+        } catch (error) {
+            console.error('Error fetching tasks:', error);
+            setError('Failed to load tasks. Please try again later.');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     useEffect(() => {
-        const fetchTasks = async () => {
-            setIsLoading(true);
-            try {
-                const response = await axios.get('/tasks/search?query=');
-                setTasks(response.data.tasks || []);
-                setFilteredResults(response.data.tasks || []);
-                setError('');
-            } catch (error) {
-                console.error('Error fetching tasks:', error);
-                setError('Failed to load tasks. Please try again later.');
-            } finally {
-                setIsLoading(false);
-            }
-        };
         fetchTasks();
     }, []);
 
@@ -95,7 +96,7 @@ function Dashboard({ name, email, onLogout }) {
     useEffect(() => {
         if (!window.PaystackPop) {
             const script = document.createElement('script');
-            script.src = 'https://js.paystack.co/v1/inline.js';
+            script.src = 'https://js.paystack.co/v2/inline.js';
             script.async = true;
             script.onload = () => {
                 console.log('Paystack SDK loaded');
@@ -194,7 +195,13 @@ function Dashboard({ name, email, onLogout }) {
                 />
             )}
 
-            {showForm && <PostTaskForm email={email} onClose={() => setShowForm(false)} />}
+            {showForm && (
+                <PostTaskForm
+                    email={email}
+                    onClose={() => setShowForm(false)}
+                    onTaskPosted={() => fetchTasks(searchQuery)}
+                />
+            )}
 
             {/* Tasks Grid */}
             {!showForm && !showOnboarding && (
