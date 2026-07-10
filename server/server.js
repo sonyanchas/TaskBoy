@@ -79,7 +79,7 @@ app.post(
         if (error) {
           console.error('Error updating booking from webhook:', error);
         } else if (updatedBooking) {
-          // Notify customer and tasker that payment succeeded and booking is confirmed
+          // Email notifications are disabled; log notification intents instead
           try {
             const customer = await getUserById(updatedBooking.customer_id);
             const tasker = await getUserById(updatedBooking.tasker_id);
