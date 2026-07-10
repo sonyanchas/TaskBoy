@@ -96,7 +96,7 @@ function Dashboard({ name, email, onLogout }) {
     useEffect(() => {
         if (!window.PaystackPop) {
             const script = document.createElement('script');
-            script.src = 'https://js.paystack.co/v2/inline.js';
+            script.src = 'https://js.paystack.co/v1/inline.js';
             script.async = true;
             script.onload = () => {
                 console.log('Paystack SDK loaded');

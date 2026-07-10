@@ -13,7 +13,7 @@ import './TaskBookingModal.css';
 //   taskerSubaccountCode: 'ACCT_xxxxxxxxxx' // Tasker's Paystack subaccount
 // }
 
-const PAYSTACK_SCRIPT_URL = 'https://js.paystack.co/v2/inline.js';
+const PAYSTACK_SCRIPT_URL = 'https://js.paystack.co/v1/inline.js';
 
 function TaskBookingModal({ task, onClose, userEmail }) {
   const [accessCode, setAccessCode] = useState(null);
