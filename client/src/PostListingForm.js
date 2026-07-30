@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import './Dashboard.css'; // Reusing Dashboard styles
 
-function PostTaskForm({ email, onClose, onTaskPosted }) {
+function PostTaskForm({ email, onClose }) {
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [category, setCategory] = useState('cleaning');
@@ -40,13 +40,13 @@ function PostTaskForm({ email, onClose, onTaskPosted }) {
         setMessage('');
 
         if (!location.trim()) {
-            setMessage('❌ Please enter a location for this service');
+            setMessage('Please enter a location for this task');
             setIsSubmitting(false);
             return;
         }
 
         if (!price || isNaN(parseFloat(price)) || parseFloat(price) <= 0) {
-            setMessage('❌ Please enter a valid price');
+            setMessage('Please enter a valid price');
             setIsSubmitting(false);
             return;
         }
@@ -59,15 +59,11 @@ function PostTaskForm({ email, onClose, onTaskPosted }) {
         formData.append('price', price);
         images.forEach((imageFile) => formData.append('images', imageFile));
 
-        // Note: we don't send taskerName/taskerSubaccountCode from the client.
-        // The backend looks those up from the logged-in Tasker's profile
-        // (via the 'user-id' header) and attaches them server-side, so a
-        // customer can never be shown a listing with no way to pay the Tasker.
         try {
             await axios.post('/tasks', formData, {
                 headers: { 'user-id': email }
             });
-            setMessage('✅ Service listed successfully!');
+            setMessage('✅ Task posted successfully!');
             // Reset form
             setTitle('');
             setDescription('');
@@ -76,23 +72,12 @@ function PostTaskForm({ email, onClose, onTaskPosted }) {
             setImages([]);
             setPreviewUrls([]);
 
-            if (onTaskPosted) {
-                onTaskPosted();
-            }
-
             // Close form after delay
             setTimeout(() => {
                 onClose();
             }, 1500);
         } catch (error) {
-            // If the backend rejects because this Tasker hasn't onboarded yet
-            // (no subaccount on file), surface that clearly rather than a
-            // generic error, since the fix is different (go set up payouts).
-            if (error.response?.status === 412) {
-                setMessage('❌ You need to set up payouts before listing a service.');
-            } else {
-                setMessage('❌ Error posting service: ' + (error.response?.data?.message || error.message));
-            }
+            setMessage('❌ Error posting task: ' + (error.response?.data?.message || error.message));
         } finally {
             setIsSubmitting(false);
         }
@@ -100,7 +85,7 @@ function PostTaskForm({ email, onClose, onTaskPosted }) {
 
     return (
         <div className="listing-form">
-            <h3>List a Service</h3>
+            <h3>Post a Task</h3>
 
             <form onSubmit={handlePostTask}>
                 <label>Title</label>
@@ -108,7 +93,7 @@ function PostTaskForm({ email, onClose, onTaskPosted }) {
                     type="text"
                     value={title}
                     onChange={(e) => setTitle(e.target.value)}
-                    placeholder="E.g., Furniture Assembly"
+                    placeholder="E.g., Assemble IKEA bookshelf"
                     required
                 />
 
@@ -129,12 +114,12 @@ function PostTaskForm({ email, onClose, onTaskPosted }) {
                 <textarea
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
-                    placeholder="Describe what's included in this service"
+                    placeholder="Describe what needs to be done, and any details a Tasker should know"
                     rows={4}
                     required
                 />
 
-                <label>Location / Service Area</label>
+                <label>Location</label>
                 <input
                     type="text"
                     value={location}
@@ -180,7 +165,7 @@ function PostTaskForm({ email, onClose, onTaskPosted }) {
                     disabled={isSubmitting}
                     className={isSubmitting ? "submitting" : ""}
                 >
-                    {isSubmitting ? "Posting..." : "List Service"}
+                    {isSubmitting ? "Posting..." : "Post Task"}
                 </button>
             </form>
 

@@ -1,11 +1,8 @@
 const express = require('express');
 const path = require('path');
 const { createClient } = require('@supabase/supabase-js');
-// Load environment variables: root .env first, then server/.env overrides if present.
-const dotenv = require('dotenv');
-const rootEnvPath = path.join(__dirname, '..', '.env');
-dotenv.config({ path: rootEnvPath });
-dotenv.config({ path: path.join(__dirname, '.env') });
+// Load environment variables from the server directory .env
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 const multer = require('multer');
 const axios = require('axios');
 const crypto = require('crypto');
@@ -24,21 +21,6 @@ const paystack = axios.create({
 
 const app = express();
 app.use(cors());
-
-// Email sending has been disabled. Removed SMTP/nodemailer support to simplify
-// local development and avoid requiring domain verification for transactional
-// email providers. Notification points below now log intents instead of sending.
-
-async function getUserById(userId) {
-  try {
-    const { data, error } = await supabase.auth.admin.listUsers();
-    if (error) throw error;
-    return data.users.find((u) => u.id === userId) || null;
-  } catch (err) {
-    console.error('getUserById error:', err);
-    return null;
-  }
-}
 
 // ========================================================
 // Paystack webhook — must see the RAW body (for signature
@@ -67,33 +49,14 @@ app.post(
 
       try {
         // Idempotent update: only flips a booking to 'paid' if it isn't already,
-        // since Paystack may retry webhook delivery. Return the updated row.
-        const { data: updatedBooking, error } = await supabase
+        // since Paystack may retry webhook delivery
+        const { error } = await supabase
           .from('bookings')
           .update({ status: 'paid', updated_at: new Date().toISOString() })
           .eq('payment_reference', reference)
-          .eq('status', 'pending')
-          .select()
-          .single();
+          .eq('status', 'pending');
 
-        if (error) {
-          console.error('Error updating booking from webhook:', error);
-        } else if (updatedBooking) {
-          try {
-            const customer = await getUserById(updatedBooking.customer_id);
-            const tasker = await getUserById(updatedBooking.tasker_id);
-
-            if (customer?.email) {
-              console.log('Email disabled: would notify customer', customer.email, 'about paid booking', updatedBooking.id);
-            }
-
-            if (tasker?.email) {
-              console.log('Email disabled: would notify tasker', tasker.email, 'about paid booking', updatedBooking.id);
-            }
-          } catch (notifyErr) {
-            console.error('Error sending booking confirmation emails:', notifyErr);
-          }
-        }
+        if (error) console.error('Error updating booking from webhook:', error);
       } catch (err) {
         console.error('Webhook processing error:', err);
       }
@@ -309,9 +272,9 @@ app.post('/api/tasker/onboard', async (req, res) => {
 // Task Listings API (fixed-price services posted by Taskers)
 // ========================================================
 
-app.post('/tasks', upload.single('image'), async (req, res) => {
+app.post('/tasks', upload.array('images', 3), async (req, res) => {
   const { title, description, category, location, price } = req.body;
-  const { file } = req;
+  const files = req.files || [];
   const userEmail = req.headers['user-id'];
 
   if (!userEmail) {
@@ -341,18 +304,25 @@ app.post('/tasks', upload.single('image'), async (req, res) => {
     }
 
     let imageURL = null;
-    if (file) {
-      const fileName = `${Date.now()}_${file.originalname}`;
-      const { error: fileError } = await supabase.storage
-        .from('task-images')
-        .upload(fileName, file.buffer, { contentType: file.mimetype, upsert: true });
+    if (files.length > 0) {
+      const uploadResults = await Promise.all(
+        files.map(async (file) => {
+          const fileName = `${Date.now()}_${file.originalname}`;
+          const { error: fileError } = await supabase.storage
+            .from('task-images')
+            .upload(fileName, file.buffer, { contentType: file.mimetype, upsert: true });
 
-      if (fileError) throw fileError;
+          if (fileError) throw fileError;
 
-      const { data: publicUrlData } = supabase.storage
-        .from('task-images')
-        .getPublicUrl(fileName);
-      imageURL = publicUrlData.publicUrl;
+          const { data: publicUrlData } = supabase.storage
+            .from('task-images')
+            .getPublicUrl(fileName);
+
+          return publicUrlData.publicUrl;
+        })
+      );
+
+      imageURL = uploadResults.length === 1 ? uploadResults[0] : JSON.stringify(uploadResults);
     }
 
     const { data, error } = await supabase
@@ -401,11 +371,26 @@ app.get('/tasks/search', async (req, res) => {
       taskerRows.map((t) => [t.user_id, t])
     );
 
-    const enrichedTasks = tasks.map((task) => ({
-      ...task,
-      taskerName: taskerMap[task.tasker_id]?.business_name || 'Unknown Tasker',
-      taskerSubaccountCode: taskerMap[task.tasker_id]?.paystack_subaccount_code || null,
-    }));
+    const enrichedTasks = tasks.map((task) => {
+      let imageURLs = task.imageURL;
+      if (typeof imageURLs === 'string') {
+        try {
+          const parsed = JSON.parse(imageURLs);
+          if (Array.isArray(parsed)) {
+            imageURLs = parsed;
+          }
+        } catch (_err) {
+          // keep original string if not JSON
+        }
+      }
+
+      return {
+        ...task,
+        imageURL: Array.isArray(imageURLs) ? imageURLs[0] : imageURLs,
+        taskerName: taskerMap[task.tasker_id]?.business_name || 'Unknown Tasker',
+        taskerSubaccountCode: taskerMap[task.tasker_id]?.paystack_subaccount_code || null,
+      };
+    });
 
     res.json({ success: true, tasks: enrichedTasks });
   } catch (error) {
@@ -446,26 +431,17 @@ app.post('/api/initialize-transaction', async (req, res) => {
 
     const { access_code, reference } = response.data.data;
 
-    const { data: bookingData, error: bookingError } = await supabase
-      .from('bookings')
-      .insert([
-        {
-          task_id: taskId,
-          tasker_id: taskRow.tasker_id,
-          customer_id: customerId,
-          amount: amount / 100, // convert back from subunits to KES
-          payment_reference: reference,
-          status: 'pending',
-        },
-      ])
-      .select()
-      .single();
-
+    const { error: bookingError } = await supabase.from('bookings').insert([
+      {
+        task_id: taskId,
+        tasker_id: taskRow.tasker_id,
+        customer_id: customerId,
+        amount: amount / 100, // convert back from subunits to KES
+        payment_reference: reference,
+        status: 'pending',
+      },
+    ]);
     if (bookingError) throw bookingError;
-
-    // Send a notification email to the customer that the booking was created
-    // Email sending disabled — log the intent instead of sending an email
-    console.log('Email disabled: would notify', email, 'that booking', bookingData.id || '(unknown)', 'is pending payment with reference', reference);
 
     res.json({ success: true, access_code, reference });
   } catch (error) {
@@ -508,6 +484,6 @@ app.get('*', (req, res) => {
 
 // Start the server
 const PORT = process.env.PORT || 5050;
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+app.listen(PORT, '127.0.0.1', () => {
+    console.log(`Server running on http://127.0.0.1:${PORT}`);
 });
