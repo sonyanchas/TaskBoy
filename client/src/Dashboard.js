@@ -3,11 +3,13 @@ import axios from 'axios';
 import PostTaskForm from './PostTaskForm';
 import TaskBookingModal from './TaskBookingModal';
 import TaskerOnboarding from './TaskerOnboarding';
+import Navbar from './Navbar';
 import './Dashboard.css';
 
 function Dashboard({ name, email, onLogout }) {
     const [showForm, setShowForm] = useState(false);
     const [showOnboarding, setShowOnboarding] = useState(false);
+    const [currentPage, setCurrentPage] = useState('home');
     const [isOnboarded, setIsOnboarded] = useState(null); // null = unknown/loading
     const [tasks, setTasks] = useState([]);
     const [searchQuery, setSearchQuery] = useState('');
@@ -165,17 +167,42 @@ function Dashboard({ name, email, onLogout }) {
         );
     };
 
-    return (
-        <div className="dashboard">
-            <h2>Welcome, {name}!</h2>
+    const handleNavigate = (page) => {
+        setCurrentPage(page);
+        setShowForm(false);
+        setShowOnboarding(false);
+    };
 
-            {/* Search Bar */}
-            <div className="search-section">
-                <input
-                    type="text"
-                    placeholder="Search by title, category, location..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
+    return (
+        <div className="dashboard-wrapper">
+            <Navbar userName={name} onLogout={onLogout} onNavigate={handleNavigate} />
+            
+            <div className="dashboard">
+                {/* Profile Page */}
+                {currentPage === 'profile' && (
+                    <div className="profile-page">
+                        <h2>My Profile</h2>
+                        <div className="profile-card">
+                            <div className="profile-info">
+                                <p><strong>Name:</strong> {name}</p>
+                                <p><strong>Email:</strong> {email}</p>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Home Page */}
+                {currentPage === 'home' && (
+                    <>
+                        <h2>Welcome, {name}!</h2>
+
+                        {/* Search Bar */}
+                        <div className="search-section">
+                            <input
+                                type="text"
+                                placeholder="Search by title, category, location..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
                 />
             </div>
 
@@ -243,20 +270,20 @@ function Dashboard({ name, email, onLogout }) {
                             {renderPlaceholderContent()}
                         </div>
                     )}
+                    </>
+                )}
                 </>
-            )}
+                )}
 
-            {/* Task Booking Modal */}
-            {selectedTask && (
-                <TaskBookingModal
-                    task={selectedTask}
-                    onClose={handleCloseModal}
-                    userEmail={email}
-                />
-            )}
-
-            {/* Logout Button */}
-            <button className="logout-btn" onClick={onLogout}>Log Out</button>
+                {/* Task Booking Modal */}
+                {selectedTask && (
+                    <TaskBookingModal
+                        task={selectedTask}
+                        onClose={handleCloseModal}
+                        userEmail={email}
+                    />
+                )}
+            </div>
         </div>
     );
 }

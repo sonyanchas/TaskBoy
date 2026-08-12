@@ -21,6 +21,7 @@ function App() {
     
     // Authentication mode state
     const [authMode, setAuthMode] = useState('register'); // Options: 'register' or 'login'
+    const [isCapsLockOn, setIsCapsLockOn] = useState(false);
     
     // Load Square SDK
     useEffect(() => {
@@ -65,6 +66,11 @@ function App() {
     // ==========================================
     // EVENT HANDLERS
     // ==========================================
+    
+    const handleCapsLockDetection = (e) => {
+        const isCaps = e.getModifierState('CapsLock');
+        setIsCapsLockOn(isCaps);
+    };
     
     const handleRegister = async (e) => {
         e.preventDefault();
@@ -143,11 +149,17 @@ function App() {
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                    onKeyDown={handleCapsLockDetection}
+                    onKeyUp={handleCapsLockDetection}
                     required
                 />
+                {isCapsLockOn && (
+                    <p className="caps-lock-warning">⚠️ Caps Lock is ON</p>
+                )}
             </div>
             <button type="submit">Login</button>
         </form>
+        
     );
 
     const renderRegistrationForm = () => (
@@ -177,8 +189,13 @@ function App() {
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                    onKeyDown={handleCapsLockDetection}
+                    onKeyUp={handleCapsLockDetection}
                     required
                 />
+                {isCapsLockOn && (
+                    <p className="caps-lock-warning">⚠️ Caps Lock is ON</p>
+                )}
             </div>
             <button type="submit">Register</button>
         </form>

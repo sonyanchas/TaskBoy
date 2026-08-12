@@ -157,3 +157,14 @@ button:hover {
   box-shadow: none;
   background: transparent;
 }
+
+/* Caps Lock Warning */
+.caps-lock-warning {
+  color: #e74c3c;
+  font-size: 12px;
+  margin-top: 5px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
